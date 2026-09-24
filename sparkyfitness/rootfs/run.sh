@@ -80,105 +80,49 @@ get_option() {
 }
 
 FRONTEND_URL="$(get_option frontend_url)"
+EXTRA_TRUSTED_ORIGINS="$(get_option extra_trusted_origins)"
 TZ_VALUE="$(get_option timezone)"
 LOG_LEVEL="$(get_option log_level)"
 NGINX_RATE_LIMIT_VALUE="$(get_option nginx_rate_limit)"
-
-supervisor_get() {
-    local endpoint="$1"
-
-    if [ -z "${SUPERVISOR_TOKEN:-}" ]; then
-        return 1
-    fi
-
-    curl -fsS --max-time 10 \
-        -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
-        "http://supervisor${endpoint}"
-}
-
-# ---------------------------------------------------------------
-# Automatically determine the Home Assistant host timezone.
-# A manually configured timezone always takes precedence.
-# ---------------------------------------------------------------
-
-if [ -z "${TZ_VALUE}" ]; then
-    HOST_INFO="$(supervisor_get /host/info 2>/dev/null || true)"
-
-    TZ_VALUE="$(
-        printf '%s' "${HOST_INFO}" |
-        jq -r '.data.timezone // .timezone // empty' 2>/dev/null ||
-        true
-    )"
-fi
-
-[ -n "${TZ_VALUE}" ] || TZ_VALUE="Etc/UTC"
-
-# ---------------------------------------------------------------
-# Automatically determine the primary Home Assistant host IPv4.
-# A manually configured frontend_url always takes precedence.
-# ---------------------------------------------------------------
+FORCE_EMAIL_LOGIN="$(get_option force_email_login)"
 
 if [ -z "${FRONTEND_URL}" ]; then
-    NETWORK_INFO="$(supervisor_get /network/info 2>/dev/null || true)"
-
-    PRIMARY_IPV4="$(
-        printf '%s' "${NETWORK_INFO}" |
-        jq -r '
-          (.data.interfaces // .interfaces // [])
-          | map(
-              select(
-                .primary == true
-                and .enabled == true
-                and .connected == true
-                and .ipv4 != null
-                and .ipv4.ip_address != null
-              )
-            )
-          | .[0].ipv4.ip_address // empty
-        ' 2>/dev/null |
-        cut -d/ -f1 ||
-        true
-    )"
-
-    # Some installations may not report enabled/connected consistently.
-    # Fall back to any primary interface with an IPv4 address.
-    if [ -z "${PRIMARY_IPV4}" ]; then
-        PRIMARY_IPV4="$(
-            printf '%s' "${NETWORK_INFO}" |
-            jq -r '
-              (.data.interfaces // .interfaces // [])
-              | map(
-                  select(
-                    .primary == true
-                    and .ipv4 != null
-                    and .ipv4.ip_address != null
-                  )
-                )
-              | .[0].ipv4.ip_address // empty
-            ' 2>/dev/null |
-            cut -d/ -f1 ||
-            true
-        )"
-    fi
-
-    if [ -z "${PRIMARY_IPV4}" ]; then
-        log "ERROR: Could not determine the Home Assistant host IPv4 address."
-        log "Set frontend_url manually in the App configuration."
-        exit 1
-    fi
-
-    FRONTEND_URL="http://${PRIMARY_IPV4}:3004"
+    log "ERROR: frontend_url is not configured."
+    log "Set it in the Home Assistant App Configuration page."
+    log "Example: https://fitness.example.com"
+    exit 1
 fi
 
+case "${FRONTEND_URL}" in
+    http://*|https://*)
+        ;;
+    *)
+        log "ERROR: frontend_url must begin with http:// or https://"
+        exit 1
+        ;;
+esac
+
+[ -n "${TZ_VALUE}" ] || TZ_VALUE="Etc/UTC"
 [ -n "${LOG_LEVEL}" ] || LOG_LEVEL="ERROR"
 [ -n "${NGINX_RATE_LIMIT_VALUE}" ] || NGINX_RATE_LIMIT_VALUE="5r/s"
+[ -n "${FORCE_EMAIL_LOGIN}" ] || FORCE_EMAIL_LOGIN="true"
 
 # Origin values should not end with /
 FRONTEND_URL="${FRONTEND_URL%/}"
 
+# Always trust the configured primary frontend URL.
+TRUSTED_ORIGINS="${FRONTEND_URL}"
+
+# Optionally trust additional origins, for example direct LAN access.
+if [ -n "${EXTRA_TRUSTED_ORIGINS}" ]; then
+    TRUSTED_ORIGINS="${TRUSTED_ORIGINS},${EXTRA_TRUSTED_ORIGINS}"
+fi
+
 log "Frontend URL: ${FRONTEND_URL}"
+log "Trusted origins: ${TRUSTED_ORIGINS}"
 log "Timezone: ${TZ_VALUE}"
 log "Log level: ${LOG_LEVEL}"
+log "Force email login: ${FORCE_EMAIL_LOGIN}"
 
 mkdir -p \
     "${PGDATA}" \
@@ -340,7 +284,7 @@ export SPARKY_FITNESS_API_ENCRYPTION_KEY="${API_ENCRYPTION_KEY}"
 export BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET_VALUE}"
 
 export SPARKY_FITNESS_FRONTEND_URL="${FRONTEND_URL}"
-export SPARKY_FITNESS_EXTRA_TRUSTED_ORIGINS="${FRONTEND_URL}"
+export SPARKY_FITNESS_EXTRA_TRUSTED_ORIGINS="${TRUSTED_ORIGINS}"
 export BETTER_AUTH_URL="${FRONTEND_URL}"
 
 export SPARKY_FITNESS_SERVER_PORT="3010"
@@ -349,7 +293,7 @@ export SPARKY_FITNESS_LOG_LEVEL="${LOG_LEVEL}"
 export SPARKY_FITNESS_CUSTOM_UPLOADS_DIRECTORY="/data/uploads"
 export SPARKY_FITNESS_CUSTOM_BACKUP_DIRECTORY="/data/backup"
 
-export SPARKY_FITNESS_FORCE_EMAIL_LOGIN="true"
+export SPARKY_FITNESS_FORCE_EMAIL_LOGIN="${FORCE_EMAIL_LOGIN}"
 export SPARKY_FITNESS_PUBLIC_API_DOCS="false"
 
 # nginx talks to the backend inside this same container.

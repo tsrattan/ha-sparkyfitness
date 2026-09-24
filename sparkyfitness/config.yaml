@@ -1,5 +1,5 @@
 name: "SparkyFitness"
-version: "0.1.5"
+version: "0.1.6"
 slug: "sparkyfitness"
 description: "Self-hosted fitness, nutrition, water and health tracking"
 url: "https://github.com/tsrattan/ha-sparkyfitness"
@@ -11,9 +11,6 @@ startup: application
 boot: auto
 init: true
 stage: experimental
-
-hassio_api: true
-
 ports:
   80/tcp: 3004
 
@@ -26,12 +23,16 @@ watchdog: "http://[HOST]:[PORT:80]/"
 
 options:
   frontend_url: ""
-  timezone: ""
+  extra_trusted_origins: ""
+  timezone: "Etc/UTC"
   log_level: "ERROR"
   nginx_rate_limit: "5r/s"
+  force_email_login: true
 
 schema:
   frontend_url: str?
-  timezone: str?
+  extra_trusted_origins: str?
+  timezone: str
   log_level: list(ERROR|WARN|INFO|DEBUG)
   nginx_rate_limit: str
+  force_email_login: bool
