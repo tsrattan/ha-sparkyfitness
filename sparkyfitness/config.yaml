@@ -1,5 +1,5 @@
 name: "SparkyFitness"
-version: "0.1.0"
+version: "0.1.1"
 slug: "sparkyfitness"
 description: "Self-hosted fitness, nutrition, water and health tracking"
 url: "https://github.com/tsrattan/ha-sparkyfitness"

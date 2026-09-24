@@ -120,6 +120,9 @@ if [ ! -s "${PGDATA}/PG_VERSION" ]; then
     rm -f "${PWFILE}"
 fi
 
+# PostgreSQL needs its runtime socket directory on every container start.
+install -d -m 2775 -o postgres -g postgres /run/postgresql
+
 log "Starting PostgreSQL..."
 
 su-exec postgres postgres \
