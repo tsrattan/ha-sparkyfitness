@@ -1,5 +1,5 @@
 name: "SparkyFitness"
-version: "0.1.1"
+version: "0.1.2"
 slug: "sparkyfitness"
 description: "Self-hosted fitness, nutrition, water and health tracking"
 url: "https://github.com/tsrattan/ha-sparkyfitness"
@@ -13,7 +13,7 @@ init: true
 stage: experimental
 
 ports:
-  80/tcp: 3005
+  80/tcp: 3004
 
 ports_description:
   80/tcp: "SparkyFitness Web UI"
@@ -23,7 +23,7 @@ watchdog: "http://[HOST]:[PORT:80]/"
 
 
 options:
-  frontend_url: "http://172.16.0.6:3005"
+  frontend_url: "http://172.16.0.6:3004"
   timezone: "Australia/Sydney"
   log_level: "ERROR"
   nginx_rate_limit: "5r/s"
