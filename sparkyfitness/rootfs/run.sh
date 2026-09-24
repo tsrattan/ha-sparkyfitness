@@ -84,8 +84,92 @@ TZ_VALUE="$(get_option timezone)"
 LOG_LEVEL="$(get_option log_level)"
 NGINX_RATE_LIMIT_VALUE="$(get_option nginx_rate_limit)"
 
-[ -n "${FRONTEND_URL}" ] || FRONTEND_URL="http://172.16.0.6:3005"
+supervisor_get() {
+    local endpoint="$1"
+
+    if [ -z "${SUPERVISOR_TOKEN:-}" ]; then
+        return 1
+    fi
+
+    curl -fsS --max-time 10 \
+        -H "Authorization: Bearer ${SUPERVISOR_TOKEN}" \
+        "http://supervisor${endpoint}"
+}
+
+# ---------------------------------------------------------------
+# Automatically determine the Home Assistant host timezone.
+# A manually configured timezone always takes precedence.
+# ---------------------------------------------------------------
+
+if [ -z "${TZ_VALUE}" ]; then
+    HOST_INFO="$(supervisor_get /host/info 2>/dev/null || true)"
+
+    TZ_VALUE="$(
+        printf '%s' "${HOST_INFO}" |
+        jq -r '.data.timezone // .timezone // empty' 2>/dev/null ||
+        true
+    )"
+fi
+
 [ -n "${TZ_VALUE}" ] || TZ_VALUE="Etc/UTC"
+
+# ---------------------------------------------------------------
+# Automatically determine the primary Home Assistant host IPv4.
+# A manually configured frontend_url always takes precedence.
+# ---------------------------------------------------------------
+
+if [ -z "${FRONTEND_URL}" ]; then
+    NETWORK_INFO="$(supervisor_get /network/info 2>/dev/null || true)"
+
+    PRIMARY_IPV4="$(
+        printf '%s' "${NETWORK_INFO}" |
+        jq -r '
+          (.data.interfaces // .interfaces // [])
+          | map(
+              select(
+                .primary == true
+                and .enabled == true
+                and .connected == true
+                and .ipv4 != null
+                and .ipv4.ip_address != null
+              )
+            )
+          | .[0].ipv4.ip_address // empty
+        ' 2>/dev/null |
+        cut -d/ -f1 ||
+        true
+    )"
+
+    # Some installations may not report enabled/connected consistently.
+    # Fall back to any primary interface with an IPv4 address.
+    if [ -z "${PRIMARY_IPV4}" ]; then
+        PRIMARY_IPV4="$(
+            printf '%s' "${NETWORK_INFO}" |
+            jq -r '
+              (.data.interfaces // .interfaces // [])
+              | map(
+                  select(
+                    .primary == true
+                    and .ipv4 != null
+                    and .ipv4.ip_address != null
+                  )
+                )
+              | .[0].ipv4.ip_address // empty
+            ' 2>/dev/null |
+            cut -d/ -f1 ||
+            true
+        )"
+    fi
+
+    if [ -z "${PRIMARY_IPV4}" ]; then
+        log "ERROR: Could not determine the Home Assistant host IPv4 address."
+        log "Set frontend_url manually in the App configuration."
+        exit 1
+    fi
+
+    FRONTEND_URL="http://${PRIMARY_IPV4}:3004"
+fi
+
 [ -n "${LOG_LEVEL}" ] || LOG_LEVEL="ERROR"
 [ -n "${NGINX_RATE_LIMIT_VALUE}" ] || NGINX_RATE_LIMIT_VALUE="5r/s"
 
