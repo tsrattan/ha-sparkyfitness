@@ -13,6 +13,62 @@ DB_NAME="sparkyfitness_db"
 DB_USER="sparky"
 APP_DB_USER="sparky_app"
 
+PG_PID=""
+SERVER_PID=""
+NGINX_PID=""
+CLEANED_UP=0
+
+cleanup() {
+    if [ "${CLEANED_UP}" = "1" ]; then
+        return
+    fi
+
+    CLEANED_UP=1
+    set +e
+
+    log "Stopping SparkyFitness services..."
+
+    # Stop accepting web requests first.
+    if [ -n "${NGINX_PID}" ] && kill -0 "${NGINX_PID}" 2>/dev/null; then
+        kill -QUIT "${NGINX_PID}" 2>/dev/null || true
+
+        for _ in $(seq 1 10); do
+            kill -0 "${NGINX_PID}" 2>/dev/null || break
+            sleep 1
+        done
+
+        kill -TERM "${NGINX_PID}" 2>/dev/null || true
+    fi
+
+    # Stop the backend before PostgreSQL.
+    if [ -n "${SERVER_PID}" ] && kill -0 "${SERVER_PID}" 2>/dev/null; then
+        kill -TERM "${SERVER_PID}" 2>/dev/null || true
+
+        for _ in $(seq 1 15); do
+            kill -0 "${SERVER_PID}" 2>/dev/null || break
+            sleep 1
+        done
+
+        if kill -0 "${SERVER_PID}" 2>/dev/null; then
+            log "Backend did not stop in time; killing it."
+            kill -KILL "${SERVER_PID}" 2>/dev/null || true
+        fi
+    fi
+
+    # Explicit fast PostgreSQL shutdown so updates/restarts do not leave
+    # the database requiring crash recovery.
+    if [ -n "${PG_PID}" ] && kill -0 "${PG_PID}" 2>/dev/null; then
+        log "Stopping PostgreSQL cleanly..."
+
+        su-exec postgres pg_ctl             -D "${PGDATA}"             -m fast             -w             -t 30             stop || kill -INT "${PG_PID}" 2>/dev/null || true
+    fi
+
+    log "Shutdown complete."
+}
+
+trap cleanup EXIT
+trap 'exit 0' SIGTERM SIGINT
+
 get_option() {
     local key="$1"
 
@@ -234,7 +290,7 @@ SERVER_PID=$!
 
 SERVER_READY=false
 
-for i in $(seq 1 120); do
+for i in $(seq 1 300); do
     if curl -fsS \
         http://127.0.0.1:3010/api/health \
         >/dev/null 2>&1; then
@@ -284,19 +340,6 @@ nginx -g 'daemon off;' &
 
 NGINX_PID=$!
 
-cleanup() {
-    log "Stopping SparkyFitness..."
-
-    kill -TERM "${NGINX_PID:-}" 2>/dev/null || true
-    kill -TERM "${SERVER_PID:-}" 2>/dev/null || true
-    kill -TERM "${PG_PID:-}" 2>/dev/null || true
-
-    wait "${NGINX_PID:-}" 2>/dev/null || true
-    wait "${SERVER_PID:-}" 2>/dev/null || true
-    wait "${PG_PID:-}" 2>/dev/null || true
-}
-
-trap 'cleanup; exit 0' SIGTERM SIGINT
 
 log "SparkyFitness is ready."
 log "Web UI: ${FRONTEND_URL}"
