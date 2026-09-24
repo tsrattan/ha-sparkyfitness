@@ -88,7 +88,7 @@ FORCE_EMAIL_LOGIN="$(get_option force_email_login)"
 
 if [ -z "${FRONTEND_URL}" ]; then
     log "ERROR: frontend_url is not configured."
-    log "Set it in the Home Assistant App Configuration page."
+    log "Set Frontend URL in the Home Assistant App configuration."
     log "Example: https://fitness.example.com"
     exit 1
 fi
@@ -97,7 +97,7 @@ case "${FRONTEND_URL}" in
     http://*|https://*)
         ;;
     *)
-        log "ERROR: frontend_url must begin with http:// or https://"
+        log "ERROR: frontend_url must start with http:// or https://"
         exit 1
         ;;
 esac
@@ -107,13 +107,14 @@ esac
 [ -n "${NGINX_RATE_LIMIT_VALUE}" ] || NGINX_RATE_LIMIT_VALUE="5r/s"
 [ -n "${FORCE_EMAIL_LOGIN}" ] || FORCE_EMAIL_LOGIN="true"
 
-# Origin values should not end with /
+# Remove trailing slash from the primary origin.
 FRONTEND_URL="${FRONTEND_URL%/}"
 
-# Always trust the configured primary frontend URL.
+# The primary frontend must always be trusted by Better Auth.
 TRUSTED_ORIGINS="${FRONTEND_URL}"
 
-# Optionally trust additional origins, for example direct LAN access.
+# Additional comma-separated origins can be supplied for LAN access,
+# reverse proxies, alternate hostnames, etc.
 if [ -n "${EXTRA_TRUSTED_ORIGINS}" ]; then
     TRUSTED_ORIGINS="${TRUSTED_ORIGINS},${EXTRA_TRUSTED_ORIGINS}"
 fi
@@ -285,6 +286,7 @@ export BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET_VALUE}"
 
 export SPARKY_FITNESS_FRONTEND_URL="${FRONTEND_URL}"
 export SPARKY_FITNESS_EXTRA_TRUSTED_ORIGINS="${TRUSTED_ORIGINS}"
+export SPARKY_FITNESS_FORCE_EMAIL_LOGIN="${FORCE_EMAIL_LOGIN}"
 export BETTER_AUTH_URL="${FRONTEND_URL}"
 
 export SPARKY_FITNESS_SERVER_PORT="3010"
@@ -293,7 +295,6 @@ export SPARKY_FITNESS_LOG_LEVEL="${LOG_LEVEL}"
 export SPARKY_FITNESS_CUSTOM_UPLOADS_DIRECTORY="/data/uploads"
 export SPARKY_FITNESS_CUSTOM_BACKUP_DIRECTORY="/data/backup"
 
-export SPARKY_FITNESS_FORCE_EMAIL_LOGIN="${FORCE_EMAIL_LOGIN}"
 export SPARKY_FITNESS_PUBLIC_API_DOCS="false"
 
 # nginx talks to the backend inside this same container.

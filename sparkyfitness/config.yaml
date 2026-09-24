@@ -1,5 +1,5 @@
 name: "SparkyFitness"
-version: "0.1.7"
+version: "0.1.8"
 slug: "sparkyfitness"
 description: "Self-hosted fitness, nutrition, water and health tracking"
 url: "https://github.com/tsrattan/ha-sparkyfitness"
@@ -32,7 +32,7 @@ options:
 schema:
   frontend_url: str?
   extra_trusted_origins: str?
-  timezone: str
+  timezone: str?
   log_level: list(ERROR|WARN|INFO|DEBUG)
   nginx_rate_limit: str
   force_email_login: bool?
