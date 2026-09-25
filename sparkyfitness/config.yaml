@@ -1,5 +1,5 @@
 name: "SparkyFitness"
-version: "0.1.8"
+version: "0.1.9"
 slug: "sparkyfitness"
 description: "Self-hosted fitness, nutrition, water and health tracking"
 url: "https://github.com/tsrattan/ha-sparkyfitness"
@@ -28,6 +28,7 @@ options:
   log_level: "ERROR"
   nginx_rate_limit: "5r/s"
   force_email_login: true
+  real_ip_header: ""
 
 schema:
   frontend_url: str?
@@ -36,3 +37,4 @@ schema:
   log_level: list(ERROR|WARN|INFO|DEBUG)
   nginx_rate_limit: str
   force_email_login: bool?
+  real_ip_header: str?

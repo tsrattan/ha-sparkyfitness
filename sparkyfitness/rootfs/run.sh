@@ -85,6 +85,7 @@ TZ_VALUE="$(get_option timezone)"
 LOG_LEVEL="$(get_option log_level)"
 NGINX_RATE_LIMIT_VALUE="$(get_option nginx_rate_limit)"
 FORCE_EMAIL_LOGIN="$(get_option force_email_login)"
+REAL_IP_HEADER="$(get_option real_ip_header)"
 
 if [ -z "${FRONTEND_URL}" ]; then
     log "ERROR: frontend_url is not configured."
@@ -124,6 +125,11 @@ log "Trusted origins: ${TRUSTED_ORIGINS}"
 log "Timezone: ${TZ_VALUE}"
 log "Log level: ${LOG_LEVEL}"
 log "Force email login: ${FORCE_EMAIL_LOGIN}"
+if [ -n "${REAL_IP_HEADER}" ]; then
+    log "Real IP header: ${REAL_IP_HEADER}"
+else
+    log "Real IP header: not configured"
+fi
 
 mkdir -p \
     "${PGDATA}" \
@@ -287,6 +293,12 @@ export BETTER_AUTH_SECRET="${BETTER_AUTH_SECRET_VALUE}"
 export SPARKY_FITNESS_FRONTEND_URL="${FRONTEND_URL}"
 export SPARKY_FITNESS_EXTRA_TRUSTED_ORIGINS="${TRUSTED_ORIGINS}"
 export SPARKY_FITNESS_FORCE_EMAIL_LOGIN="${FORCE_EMAIL_LOGIN}"
+
+if [ -n "${REAL_IP_HEADER}" ]; then
+    export SPARKY_FITNESS_REAL_IP_HEADER="${REAL_IP_HEADER}"
+else
+    unset SPARKY_FITNESS_REAL_IP_HEADER 2>/dev/null || true
+fi
 export BETTER_AUTH_URL="${FRONTEND_URL}"
 
 export SPARKY_FITNESS_SERVER_PORT="3010"
