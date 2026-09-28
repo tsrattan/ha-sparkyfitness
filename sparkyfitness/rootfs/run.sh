@@ -17,6 +17,8 @@ PG_PID=""
 SERVER_PID=""
 NGINX_PID=""
 CLEANED_UP=0
+EXIT_RECORDED=0
+EXIT_LOG="/data/last_exit.log"
 
 cleanup() {
     if [ "${CLEANED_UP}" = "1" ]; then
@@ -66,8 +68,84 @@ cleanup() {
     log "Shutdown complete."
 }
 
-trap cleanup EXIT
-trap 'exit 0' SIGTERM SIGINT
+record_exit() {
+    local reason="${1:-unknown}"
+    local detail="${2:-}"
+    local tmp="${EXIT_LOG}.tmp"
+
+    {
+        printf 'timestamp=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        printf 'reason=%s\n' "${reason}"
+        printf 'detail=%s\n' "${detail}"
+
+        if [ -n "${PG_PID}" ]; then
+            if kill -0 "${PG_PID}" 2>/dev/null; then
+                printf 'postgresql_pid=%s state=running\n' "${PG_PID}"
+            else
+                printf 'postgresql_pid=%s state=stopped\n' "${PG_PID}"
+            fi
+        else
+            printf 'postgresql_pid=not_started\n'
+        fi
+
+        if [ -n "${SERVER_PID}" ]; then
+            if kill -0 "${SERVER_PID}" 2>/dev/null; then
+                printf 'backend_pid=%s state=running\n' "${SERVER_PID}"
+            else
+                printf 'backend_pid=%s state=stopped\n' "${SERVER_PID}"
+            fi
+        else
+            printf 'backend_pid=not_started\n'
+        fi
+
+        if [ -n "${NGINX_PID}" ]; then
+            if kill -0 "${NGINX_PID}" 2>/dev/null; then
+                printf 'nginx_pid=%s state=running\n' "${NGINX_PID}"
+            else
+                printf 'nginx_pid=%s state=stopped\n' "${NGINX_PID}"
+            fi
+        else
+            printf 'nginx_pid=not_started\n'
+        fi
+    } > "${tmp}"
+
+    mv "${tmp}" "${EXIT_LOG}"
+    EXIT_RECORDED=1
+}
+
+on_sigterm() {
+    record_exit "external_stop" "signal=SIGTERM"
+    exit 0
+}
+
+on_sigint() {
+    record_exit "external_stop" "signal=SIGINT"
+    exit 0
+}
+
+on_exit() {
+    local status=$?
+
+    # Prevent recursion when this function exits.
+    trap - EXIT
+
+    # Catch startup/script failures which did not reach the process
+    # supervision section.
+    if [ "${EXIT_RECORDED}" = "0" ]; then
+        if [ "${status}" -eq 0 ]; then
+            record_exit "script_exit" "exit_code=${status}"
+        else
+            record_exit "script_error" "exit_code=${status}"
+        fi
+    fi
+
+    cleanup
+    exit "${status}"
+}
+
+trap on_exit EXIT
+trap on_sigterm SIGTERM
+trap on_sigint SIGINT
 
 get_option() {
     local key="$1"
@@ -138,6 +216,13 @@ mkdir -p \
     /data/backup
 
 chmod 700 "${SECRET_DIR}"
+
+if [ -s "${EXIT_LOG}" ]; then
+    log "Previous exit diagnostic:"
+    while IFS= read -r line; do
+        log "  ${line}"
+    done < "${EXIT_LOG}"
+fi
 
 # -------------------------------------------------------------------
 # Secrets
@@ -387,16 +472,44 @@ log "SparkyFitness is ready."
 log "Web UI: ${FRONTEND_URL}"
 
 set +e
-wait -n "${PG_PID}" "${SERVER_PID}" "${NGINX_PID}"
-EXIT_CODE=$?
+EXITED_PID=""
+
+wait -n -p EXITED_PID "${PG_PID}" "${SERVER_PID}" "${NGINX_PID}"
+CHILD_STATUS=$?
+
 set -e
 
-log "A SparkyFitness service exited unexpectedly."
+case "${EXITED_PID:-}" in
+    "${PG_PID}")
+        EXITED_PROCESS="postgresql"
+        ;;
+    "${SERVER_PID}")
+        EXITED_PROCESS="backend"
+        ;;
+    "${NGINX_PID}")
+        EXITED_PROCESS="nginx"
+        ;;
+    *)
+        EXITED_PROCESS="unknown"
+        ;;
+esac
 
-cleanup
+record_exit \
+    "child_exit" \
+    "process=${EXITED_PROCESS} pid=${EXITED_PID:-unknown} exit_code=${CHILD_STATUS}"
 
-if [ "${EXIT_CODE}" -eq 0 ]; then
-    EXIT_CODE=1
+log "ERROR: Managed process exited unexpectedly."
+log "Process: ${EXITED_PROCESS}"
+log "PID: ${EXITED_PID:-unknown}"
+log "Exit code: ${CHILD_STATUS}"
+log "Diagnostic saved to ${EXIT_LOG}"
+
+# Even if a child exits with status 0, this is unexpected for a
+# long-running App, so report failure to Supervisor.
+APP_STATUS="${CHILD_STATUS}"
+if [ "${APP_STATUS}" -eq 0 ]; then
+    APP_STATUS=1
 fi
 
-exit "${EXIT_CODE}"
+exit "${APP_STATUS}"
+
