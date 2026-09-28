@@ -1,9 +1,9 @@
 ARG BUILD_VERSION=dev
 ARG BUILD_ARCH=amd64
 
-FROM codewithcj/sparkyfitness:latest AS frontend
+FROM codewithcj/sparkyfitness@sha256:f11e754934baefa14dae64540a5e79fc14189542fac8e2968ec9cdbf350f5911 AS frontend
 
-FROM codewithcj/sparkyfitness_server:latest
+FROM codewithcj/sparkyfitness_server@sha256:0859618c5f13df0977cbe4bb1df19ef3b01def15da167e3c400fae809795f56e
 
 ARG BUILD_VERSION
 ARG BUILD_ARCH
