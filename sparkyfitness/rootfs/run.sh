@@ -454,8 +454,20 @@ mkdir -p \
     /var/cache/nginx/uwsgi \
     /var/cache/nginx/scgi
 
+# Newer SparkyFitness nginx templates require the container DNS resolver.
+NGINX_RESOLVER="$(
+    awk '$1 == "nameserver" { print $2; exit }' /etc/resolv.conf
+)"
+
+if [ -z "${NGINX_RESOLVER}" ]; then
+    NGINX_RESOLVER="127.0.0.11"
+fi
+
+export NGINX_RESOLVER
+log "Nginx resolver: ${NGINX_RESOLVER}"
+
 envsubst \
-    '$SPARKY_FITNESS_SERVER_HOST $SPARKY_FITNESS_SERVER_PORT $NGINX_RATE_LIMIT $SPARKY_FITNESS_FRONTEND_URL $NGINX_LISTEN_PORT $NGINX_ACCESS_LOG $NGINX_ERROR_LOG' \
+    '$SPARKY_FITNESS_SERVER_HOST $SPARKY_FITNESS_SERVER_PORT $NGINX_RATE_LIMIT $SPARKY_FITNESS_FRONTEND_URL $NGINX_LISTEN_PORT $NGINX_ACCESS_LOG $NGINX_ERROR_LOG $NGINX_RESOLVER' \
     < /etc/nginx/templates/default.conf.template \
     > /etc/nginx/conf.d/default.conf
 
