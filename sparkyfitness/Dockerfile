@@ -4,7 +4,6 @@ ARG BUILD_ARCH=amd64
 FROM codewithcj/sparkyfitness@sha256:f11e754934baefa14dae64540a5e79fc14189542fac8e2968ec9cdbf350f5911 AS frontend
 
 FROM codewithcj/sparkyfitness_server@sha256:0859618c5f13df0977cbe4bb1df19ef3b01def15da167e3c400fae809795f56e
-
 ARG BUILD_VERSION
 ARG BUILD_ARCH
 
@@ -27,8 +26,9 @@ COPY --from=frontend /etc/nginx/mime.types /etc/nginx/mime.types
 COPY --from=frontend /etc/nginx/templates/default.conf.template /etc/nginx/templates/default.conf.template
 
 COPY rootfs/run.sh /run.sh
+COPY rootfs/backup.sh /backup.sh
 
-RUN chmod 0755 /run.sh && \
+RUN chmod 0755 /run.sh /backup.sh && \
     mkdir -p \
       /etc/nginx/conf.d \
       /run/nginx \
