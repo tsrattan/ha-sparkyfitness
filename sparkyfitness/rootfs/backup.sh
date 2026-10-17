@@ -16,6 +16,7 @@ log() {
 
 cleanup() {
     rm -rf "${TMP_DIR}" 2>/dev/null || true
+    rm -f "${BACKUP_FILE}.tmp" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -66,6 +67,10 @@ META
 log "Creating backup bundle..."
 
 tar -C "${TMP_DIR}" -czf "${BACKUP_FILE}.tmp" .
+
+log "Verifying backup archive..."
+tar -tzf "${BACKUP_FILE}.tmp" >/dev/null
+
 mv "${BACKUP_FILE}.tmp" "${BACKUP_FILE}"
 chmod 600 "${BACKUP_FILE}"
 
