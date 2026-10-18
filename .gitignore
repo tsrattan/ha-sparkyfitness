@@ -1,0 +1,6 @@
+
+# SparkyFitness validation reports
+sparkyfitness-validation-*.log
+
+# Local database backups
+sparkyfitness-*.tar.gz
